@@ -61,38 +61,41 @@ def main():
     minor = False
     autosummary = False
     dry = False
+
+    all_dependencies = []
     
     print
     for template in templates:
         tfname = '%s%s.txt' % (DEST_DIR, fixfilename(template))
-        sys.stdout.write('%s > %s' % (template, tfname))
+        print '%s > %s' % (template, tfname)
         f1 = open(tfname, 'r')
         dependencies = f1.readlines()
         f1.close()
-        print
         for d in dependencies:
             d = d.strip()
             filename = '%s%s%s' % (DEST_DIR, fixfilename(d), EXTENSION)
-            sys.stdout.write('\t%s (%s)' % (d, filename))
-            print
-            reader = PageFromFileReader(filename,
-                                        pageStartMarker, pageEndMarker,
-                                        titleStartMarker, titleEndMarker,
-                                        include, notitle)
-            bot = PageFromFileRobot(reader,
-                                    force, append, summary, minor, autosummary, dry)
-            bot.run()
-
-
-
-            #print UPLOAD_CMD % dfname
-            #p = Popen(UPLOAD_CMD % dfname, shell=True,
-            #          stdin=PIPE, stdout=PIPE, stderr=STDOUT,
-            #          close_fds=True)
-            #response = p.stdout.read()
-            #print response
-            #time.sleep(120)
+            if filename not in all_dependencies:
+                all_dependencies.append(filename)
+                print '\t%s (%s)' % (d, filename)
         print
+    all_dependencies.sort()
+    
+    for filename in all_dependencies:
+        reader = PageFromFileReader(filename,
+                                    pageStartMarker, pageEndMarker,
+                                    titleStartMarker, titleEndMarker,
+                                    include, notitle)
+        bot = PageFromFileRobot(reader,
+                                force, append, summary, minor, autosummary, dry)
+        bot.run()
+        #print UPLOAD_CMD % dfname
+        #p = Popen(UPLOAD_CMD % dfname, shell=True,
+        #          stdin=PIPE, stdout=PIPE, stderr=STDOUT,
+        #          close_fds=True)
+        #response = p.stdout.read()
+        #print response
+        #time.sleep(120)
+    print
         
         
 
