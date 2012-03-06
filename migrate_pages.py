@@ -1,6 +1,7 @@
 # -*- encoding: utf-8 -*-
 
 import codecs
+import os
 import re
 import sys
 
@@ -177,9 +178,8 @@ def convert_headers(html, spans_tags, debug=False):
     for p in soup.find_all(name='p'):
         for s in p.find_all(name='span', attrs={'class':bold_class}):
             #print s.parent
-            new_tag = soup.new_tag('h2')
-            new_tag.string = s.string
-            s.parent.replace_with(new_tag)
+            new_string = '\n\n==%s==\n\n' % s.string
+            s.parent.replace_with(new_string)
     #assert False
     return unicode(soup), title
 
@@ -253,7 +253,12 @@ def find_references(html, debug=False):
         if debug:
             print num, href, name
             print note
-    return html, references
+        # remove original note
+        a.parent.parent.decompose()
+    # rm <hr>, insert anchor for references
+    hr = soup.hr
+    hr.replace_with('\n\n==References==\n{{Reflist}}\n\n')
+    return unicode(soup), references
 
 
 def replace_references(html, references, debug=False):
@@ -263,18 +268,21 @@ def replace_references(html, references, debug=False):
         <sup><a href="\#ftnt11" name="ftnt_ref11">[11]</a></sup>
     MediaWiki:
         <ref name="ftnt_ref11">Dorothy Ochiai Hazama and Jane Okamoto Komeiji, \
-        Okage Same De: The Japanese in Hawai\xe2\x80\x98i 1885-1985 \
+        ''Okage Same De: The Japanese in Hawai\xe2\x80\x98i 1885-1985'' \
         (Honolulu: Bess Press, 1986), 130.</ref>
     
     NOTE: The href and name in the in-text note and the ones in the footnote
     at the bottom are flipped! (i.e. the name in the footnote is the href of the
     <sup><a> in the text.)
+    NOTE: <em> tags are converted to WikiText ''.
     """
     soup = BeautifulSoup(html)
     for name in references.keys():
         ref = references[name]
         href = '#%s' % name
         name = ref['href']
+        note = ref['note']
+        note = note.replace('<em>', "''").replace('</em>', "''")
         a = soup.find('a', attrs={'name':name, 'href':href}).parent
         if debug:
             print name
@@ -283,7 +291,8 @@ def replace_references(html, references, debug=False):
             print '<a href="%s" name="%s">' % (href, name)
             print a
         new_tag = soup.new_tag('ref')
-        new_tag.string = ref['note']
+        new_tag['name'] = name
+        new_tag.string = note
         a.replace_with(new_tag)
     return unicode(soup)
 
@@ -291,13 +300,43 @@ def substitute_html_entities(html):
     return EntitySubstitution.substitute_html(html)
 
 
-DEBUG = False
-fname = 'EmergencyServiceCommitteeNakamura.docx.html'
-#fname = 'KooskiaWegars.doc.html'
-#fname = 'SoneMonicaMatsumoto.docx.html'
+def convert_tags_to_wikitext(html):
+    """One last pass...
+    """
+    # <em>
+    html = html.replace('<em>', "''").replace('</em>', "''")
+    # <br/>
+    html = html.replace('<br/>', '').replace('<br />', '')
+    # <a>
+    pattern = r'<a class="[a-z0-9 ]+" href="(http://[a-zA-Z0-9 _.,-;:/?&#%]+)">([a-zA-Z0-9 _.,-;:‘/?&#%]+)</a>'
+    replace = r'[\1 \2]'
+    html = re.sub(pattern, replace, html)
+    # empty <a> tags
+    pattern = r'<a class="[a-z0-9 ]+" href="(http://[a-zA-Z0-9 _.,-;:/?&#%]+)"></a>'
+    html = re.sub(pattern, '', html)
+    # spacing
+    html = html.replace('\n\n\n', '\n\n')
+    return html
 
-f = codecs.open(fname, 'r', 'utf-8')
-raw = f.read()
+def bury_the_bodies(html):
+    # <body class="c10">, </body>
+    pattern = u'<body class="[a-z0-9 ]+">'
+    html = re.sub(pattern, '', html)
+    html = html.replace('</body>', '')
+    return html
+
+
+
+DEBUG = False
+fname = 'samples/pass1/EmergencyServiceCommitteeNakamura.docx.html'
+#fname = 'samples/pass1/KooskiaWegars.doc.html'
+#fname = 'samples/pass1/SoneMonicaMatsumoto.docx.html'
+DEST_DIR = '/home/gjost/www/densho/encyclopedia/wiki/pages'
+
+infile = codecs.open(fname, 'r', 'utf-8')
+raw = infile.read()
+infile.close()
+
 html = UnicodeDammit(raw, ["windows-1252"], smart_quotes_to="html").unicode_markup
 html = demoronizer(html)
 
@@ -309,12 +348,27 @@ html = convert_headword_links(html)
 html = convert_spans_tags(html, spans_tags)
 html,references = find_references(html)
 html = replace_references(html, references)
-html = remove_whitespace(html)
-html = remove_tags(html, rmthese=['span',])
+#html = remove_whitespace(html)
 html = convert_paragraphs(html)
+html = remove_tags(html, rmthese=['span',])
+html = convert_tags_to_wikitext(html)
 
+#Put page into a format that pywikipediabot.pagefromfile can understand.
+TEMPLATE = """{{-start-}}
+'''%s'''
+%s
+{{-stop-}}"""
+EXTENSION = 'mwp'
+soup = BeautifulSoup(html)
+page = TEMPLATE % (title, unicode(soup.body))
+page = bury_the_bodies(page)
 
-print html
-#soup = BeautifulSoup(html)
+# write to file
+outname = '/'.join([DEST_DIR, '%s.%s' % (title, EXTENSION)]).replace(' ', '-')
+print outname
+out = codecs.open(outname, 'w', 'utf-8')
+out.write(page)
+out.close()
+
+#print page
 #print(soup.prettify(formatter=substitute_html_entities))
-
