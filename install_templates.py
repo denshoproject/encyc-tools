@@ -27,6 +27,9 @@ templates = [
     'Template:Citation/core',
     'Template:Infobox',
     'Template:Navbox',
+    'Template:Reflist',
+    'Template:Refbegin',
+    'Template:Refend',
     ]
 EXTENSION = '.mwt'
 
