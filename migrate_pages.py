@@ -9,6 +9,27 @@ from bs4 import BeautifulSoup, UnicodeDammit
 from bs4.dammit import EntitySubstitution
 
 
+
+DEBUG = False
+SRC_DIR  = '/home/gjost/www/densho/encyclopedia/wiki/documents'
+DEST_DIR = '/home/gjost/www/densho/encyclopedia/wiki/pages'
+# Template that pywikipediabot.pagefromfile understands.
+TEMPLATE = """{{-start-}}
+'''%s'''
+%s
+{{-stop-}}"""
+# output file extension
+EXTENSION = 'mwp'
+
+SOURCE_FILES = [
+    'EmergencyServiceCommitteeNakamura.docx.html',
+    'KooskiaWegars.doc.html',
+    'SoneMonicaMatsumoto.docx.html',
+    'kotonk.doc.html',
+    ]
+
+
+
 def demoronizer(text):
     """
     Converts Microsoft proprietary characters (e.g. smart quotes, em-dashes)
@@ -327,48 +348,52 @@ def bury_the_bodies(html):
 
 
 
-DEBUG = False
-fname = 'samples/pass1/EmergencyServiceCommitteeNakamura.docx.html'
-#fname = 'samples/pass1/KooskiaWegars.doc.html'
-#fname = 'samples/pass1/SoneMonicaMatsumoto.docx.html'
-DEST_DIR = '/home/gjost/www/densho/encyclopedia/wiki/pages'
 
-infile = codecs.open(fname, 'r', 'utf-8')
-raw = infile.read()
-infile.close()
 
-html = UnicodeDammit(raw, ["windows-1252"], smart_quotes_to="html").unicode_markup
-html = demoronizer(html)
+def main():
+    for fname in SOURCE_FILES:
+        inname = '/'.join([SRC_DIR, fname])
+        print 'IN : %s' % inname
+        infile = codecs.open(inname, 'r', 'utf-8')
+        raw = infile.read()
+        infile.close()
+        
+        # convert (again) to Unicode
+        html = UnicodeDammit(raw, ["windows-1252"], smart_quotes_to="html").unicode_markup
+        # convert Windoze chars
+        html = demoronizer(html)
+        
+        spans_tags = map_spans_to_tags(html)
+        # transform in various ways
+        html = remove_empty_tags(html)
+        html,title = convert_headers(html, spans_tags)
+        if not title:
+            t = os.path.basename(fname)
+            ext = os.path.splitext(t)
+            title = t.replace(ext[-1], '')
+        html = convert_headword_links(html)
+        html = convert_spans_tags(html, spans_tags)
+        html,references = find_references(html)
+        html = replace_references(html, references)
+        #html = remove_whitespace(html)
+        html = convert_paragraphs(html)
+        html = remove_tags(html, rmthese=['span',])
+        html = convert_tags_to_wikitext(html)
+        
+        # templatize
+        soup = BeautifulSoup(html)
+        page = TEMPLATE % (title, unicode(soup.body))
+        page = bury_the_bodies(page)
+        
+        # write to file
+        outname = '/'.join([DEST_DIR, '%s.%s' % (title, EXTENSION)]).replace(' ', '-')
+        print 'OUT: %s' % outname
+        out = codecs.open(outname, 'w', 'utf-8')
+        out.write(page)
+        out.close()
+        if os.path.exists(outname):
+            print 'OK'
+        print
 
-spans_tags = map_spans_to_tags(html)
-
-html = remove_empty_tags(html)
-html,title = convert_headers(html, spans_tags)
-html = convert_headword_links(html)
-html = convert_spans_tags(html, spans_tags)
-html,references = find_references(html)
-html = replace_references(html, references)
-#html = remove_whitespace(html)
-html = convert_paragraphs(html)
-html = remove_tags(html, rmthese=['span',])
-html = convert_tags_to_wikitext(html)
-
-#Put page into a format that pywikipediabot.pagefromfile can understand.
-TEMPLATE = """{{-start-}}
-'''%s'''
-%s
-{{-stop-}}"""
-EXTENSION = 'mwp'
-soup = BeautifulSoup(html)
-page = TEMPLATE % (title, unicode(soup.body))
-page = bury_the_bodies(page)
-
-# write to file
-outname = '/'.join([DEST_DIR, '%s.%s' % (title, EXTENSION)]).replace(' ', '-')
-print outname
-out = codecs.open(outname, 'w', 'utf-8')
-out.write(page)
-out.close()
-
-#print page
-#print(soup.prettify(formatter=substitute_html_entities))
+if __name__ == '__main__':
+    main()
