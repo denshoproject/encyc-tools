@@ -288,7 +288,7 @@ TEMPLATE = """{{-start-}}
 EXTENSION = '.mwt'
 
 def fixfilename(fn):
-    return fn.replace('/', '-')
+    return fn.replace('/', '-').replace(':', '-')
 
 
 def download():

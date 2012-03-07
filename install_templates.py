@@ -19,12 +19,17 @@ import wikipedia as pywikibot
 
 
 
-DEST_DIR = '/home/gjost/www/densho/encyclopedia/wiki/templates/'
+SEP = os.path.sep
+if sys.platform == 'win32':
+    DEST_DIR = SEP.join(['e:','encyclopedia','wiki','templates'])
+else:
+    DEST_DIR = '/home/gjost/www/densho/encyclopedia/wiki/templates'
+
 # Delete existing pages before uploading
 force = True
 # Templates to upload (points to './templates/NAME.txt')
 templates = [
-    'Template:Citation/core',
+    'Template:Citation',
     'Template:Infobox',
     'Template:Navbox',
     'Template:Reflist',
@@ -35,7 +40,7 @@ EXTENSION = '.mwt'
 
 
 def fixfilename(fn):
-    return fn.replace('/', '-')
+    return fn.replace('/', '-').replace(':', '-')
 
 
 
@@ -66,17 +71,21 @@ def main():
     
     print
     for template in templates:
-        tfname = '%s%s.txt' % (DEST_DIR, fixfilename(template))
+        print template
+        fn = '%s.txt' % fixfilename(template)
+        tfname = SEP.join([DEST_DIR, fn])
         print '%s > %s' % (template, tfname)
         f1 = open(tfname, 'r')
         dependencies = f1.readlines()
         f1.close()
         for d in dependencies:
+            print '    %s' % d
             d = d.strip()
-            filename = '%s%s%s' % (DEST_DIR, fixfilename(d), EXTENSION)
+            dfn = '%s%s' % (fixfilename(d), EXTENSION)
+            filename = SEP.join([DEST_DIR, dfn])
             if filename not in all_dependencies:
                 all_dependencies.append(filename)
-                print '\t%s (%s)' % (d, filename)
+                #print '\t%s (%s)' % (d, filename)
         print
     all_dependencies.sort()
     
