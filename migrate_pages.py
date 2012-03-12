@@ -97,12 +97,14 @@ def map_spans_to_tags(html, debug=False):
         return styles
     # break up raw CSS from <head><style> tag into selectors and declarations
     lines = []
-    styletag = soup('style')[0].contents[0]
-    for line in styletag.split('}'):
-        ab = line.split('{')
-        if len(ab) == 2:
-            lines.append({'selector':    ab[0].replace('.', ''),
-                          'declaration': ab[1].replace('}', ''),})
+    styletag = None
+    if soup('style') and soup('style')[0] and soup('style')[0].contents[0]:
+        if styletag:
+            for line in styletag.split('}'):
+                ab = line.split('{')
+                if len(ab) == 2:
+                    lines.append({'selector':    ab[0].replace('.', ''),
+                                  'declaration': ab[1].replace('}', ''),})
     # extract the rules we're interested in
     for rule in lines:
         if rule['selector'] not in EXCLUDED_TAGS:
@@ -278,7 +280,8 @@ def find_references(html, debug=False):
         a.parent.parent.decompose()
     # rm <hr>, insert anchor for references
     hr = soup.hr
-    hr.replace_with('\n\n==References==\n{{Reflist}}\n\n')
+    if hr:
+        hr.replace_with('\n\n==References==\n{{Reflist}}\n\n')
     return unicode(soup), references
 
 
@@ -351,7 +354,13 @@ def bury_the_bodies(html):
 
 
 def main():
-    for fname in SOURCE_FILES:
+    #source_files = SOURCE_FILES
+    source_files = os.listdir(SRC_DIR)
+    source_files.sort()
+    print source_files
+    print
+    
+    for fname in source_files:
         inname = '/'.join([SRC_DIR, fname])
         print 'IN : %s' % inname
         infile = codecs.open(inname, 'r', 'utf-8')
