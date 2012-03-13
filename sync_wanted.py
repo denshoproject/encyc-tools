@@ -61,6 +61,11 @@ UPLOAD_TEMPLATE_TITLE_END = "'''"
 TEMPLATE_EXTENSION = '.mwt'
 PAGE_EXTENSION = '.mwp'
 
+TITLE_BLACKLIST = [
+    'Template talk', 'User:',
+    'es', 'fa:', 'ja:', 'nl:', 
+    'Template:Payoff_matrix', 'Help:Template', 'Help:Page name', 
+    ]
 
 
 def fixfilename(fn):
@@ -78,7 +83,13 @@ def get_qppage(api_url, qppage):
     r = requests.get(url)
     query = simplejson.loads(r.text)
     for r in query['query']['querypage']['results']:
-        results.append(r['title'])
+        # only add titles that aren't blacklisted
+        n = 0
+        for x in TITLE_BLACKLIST:
+            if (x in r['title']) or (x.lower() in r['title']):
+                n = n + 1
+        if n == 0:
+            results.append(r['title'])
     results.sort()
     return results
 
