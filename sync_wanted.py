@@ -1,3 +1,4 @@
+#!/usr/bin/python
 """sync_wanted.py
 
 Queries local MediaWiki for wanted files/pages/templates.
@@ -10,6 +11,7 @@ NOTE: Templates often include other templates/pages/files, so you
 will probably have to run this script multiple times.
 """
 
+from optparse import OptionParser, OptionGroup
 from datetime import datetime
 import codecs
 import os
@@ -272,20 +274,61 @@ def sync_pages(api_url):
 
 
 def main():
-    templates = get_qppage(DEST_API, 'Wantedtemplates')
-    pages = get_qppage(DEST_API, 'Wantedpages')
-    #files = get_qppage(DEST_API, 'Wantedfiles')
-    files = []
-    n = 0
-    while (templates or pages or files) and n < 10:
-        print '----------------------------------------------------------------------'
-        print 'ROUND %s' % n
-        templates = sync_templates(DEST_API)
-        pages = sync_pages(DEST_API)
-        #files = sync_files(DEST_API)
-        print
-        # no infinite loops...
-        n = n + 1
+    parser = OptionParser()
+    
+    group = OptionGroup(parser, "Multiple files")
+    group.add_option("-t", "--templates",
+                     action="store_true", dest="gettemplates", default=False,
+                     help="Get wanted templates.")
+    group.add_option("-p", "--pages",
+                     action="store_true", dest="getpages", default=False,
+                     help="Get wanted pages.")
+    group.add_option("-f", "--files",
+                     action="store_true", dest="getfiles", default=False,
+                     help="Get wanted files.")
+    parser.add_option_group(group)
+    
+    group = OptionGroup(parser, "Individual files")
+    group.add_option("-T", "--template", dest="gettemplate", default=None,
+                     help="Get a particular template.")
+    group.add_option("-P", "--page", dest="getpage", default=None,
+                     help="Get a particular page.")
+    group.add_option("-F", "--file", dest="getfile", default=None,
+                     help="Get a particular template.")
+    parser.add_option_group(group)
+    (options, args) = parser.parse_args()
+    
+    # individual files
+    if options.gettemplate:
+        get_template(options.gettemplate)
+        put_template(options.gettemplate)
+    if options.getpage:
+        get_page(options.getpage)
+        put_page(options.getpage)
+    #if options.getfile:
+    #    get_file(options.getfile)
+    #    put_file(options.getfile)
+    
+    # multiple files
+    if options.gettemplates or options.getpages or options.getfiles:
+        templates = []; pages = []; files = []
+        if options.gettemplates:
+            templates = get_qppage(DEST_API, 'Wantedtemplates')
+        if options.getpages:
+            pages = get_qppage(DEST_API, 'Wantedpages')
+        #if options.getfiles:
+        #    files = get_qppage(DEST_API, 'Wantedfiles')
+        files = []
+        n = 0
+        while (templates or pages or files) and n < 10:
+            print '----------------------------------------------------------------------'
+            print 'ROUND %s' % n
+            templates = sync_templates(DEST_API)
+            pages = sync_pages(DEST_API)
+            #files = sync_files(DEST_API)
+            print
+            # no infinite loops...
+            n = n + 1
 
 if __name__ == '__main__':
     main()
