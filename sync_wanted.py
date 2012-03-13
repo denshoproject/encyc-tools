@@ -100,24 +100,33 @@ def get_template(title):
         pass
     else:
         family = pywikibot.Family('wikipedia')
-        page = pywikibot.Page(pywikibot.getSite(fam=family), title.encode('utf-8'))
         try:
-            text = page.get()
-        except pywikibot.IsRedirectPage:
-            target = page.getRedirectTarget()
-            if DEBUG:
-                print '    REDIRECT'
-                print '    %s > %s' % (title, target)
-            get_template(target.title())
-            text = '#REDIRECT [[%s]]' % page.getRedirectTarget()
+            page = pywikibot.Page(pywikibot.getSite(fam=family), title.encode('utf-8'))
         except:
-            print 'ERROR!!!'
-            text = None
+            page = None
+        text = None
+        if page:
+            try:
+                text = page.get()
+            except pywikibot.IsRedirectPage:
+                target = page.getRedirectTarget()
+                if DEBUG:
+                    print '    REDIRECT'
+                    print '    %s > %s' % (title, target)
+                get_template(target.title())
+                text = '#REDIRECT [[%s]]' % page.getRedirectTarget()
+            except:
+                print 'ERROR getting template!'
         if text:
-            contents = UPLOAD_TEMPLATE % (title, text.strip())
-            f = codecs.open(fname, 'w', 'utf-8')
-            f.write(contents)
-            f.close()
+            try:
+                contents = UPLOAD_TEMPLATE % (title, text.strip())
+            except:
+                print 'ERROR preparing template contents!'
+                contents = None
+            if contents:
+                f = codecs.open(fname, 'w', 'utf-8')
+                f.write(contents)
+                f.close()
 
 def put_template(title):
     """Upload a template to MediaWiki
