@@ -1,16 +1,18 @@
 # source: therealkatie.net/blog/2011/nov/28/katie-finally-talks-about-her-fabfiles/
 
-from fabric.api import run, sudo, hosts, settings, abort, warn, cd, local, put, get
+import codecs
+import random
+import string
+
+from fabric.api import run, sudo, hosts, settings, abort, warn, cd, local, put, get, env, open_shell
 from fabric.contrib.console import confirm
 from fabric.contrib.files import exists, contains, sed, append
 from fabric.operations import prompt
 
-import string, random
-
-PACKAGES = ('ssh', 'ufw', 'mg', 'curl', 'wget',)
+PACKAGES = ['ssh', 'ufw', 'mg', 'curl', 'wget',
+            'git', 'subversion', 'python-pip',]
 
 def pre_setup():
-    print 'Setting up VirtualBox guest.'
     print 'Customize vanilla-deb6 before continuing.'
     print '  - Make a clone of vanilla-deb6.'
     print '  - Boot guest.'
@@ -65,24 +67,27 @@ def ssh_setup():
     sudo('/etc/init.d/ssh restart')
 
 
-MW_PATH = '/opt/mediawiki-1.18.1-0/apps/mediawiki/htdocs'
+BITNAMI_PATH = '/opt/mediawiki-1.18.1-0'
+MW_PATH = '%s/apps/mediawiki/htdocs' % BITNAMI_PATH
 MW_LOCALSETTINGS = '%s/LocalSettings.php' % MW_PATH
 MW_EXTENSIONS_PATH = '%s/extensions' % MW_PATH
+MW_VERSION = '1.18.1-0'
+MW_FILENAME = 'bitnami-mediawiki-%s-linux-installer.bin' % MW_VERSION
 
-def mediawiki_setup():
+def mw_setup():
     print('------------------------------------------------------------------------') 
     # Make sure port 80 is open
     sudo('ufw allow 80/tcp')
     # Install
     print('Installing  Bitnami MediaWiki')
-    version = '1.18.1-0'
-    filename = 'bitnami-mediawiki-%s-linux-installer.bin' % version
-    url = 'http://bitnami.org/files/stacks/mediawiki/%s/%s' % (version, filename)
-    run('wget %s' % url)
-    run('chmod +x %s' % filename)
-    sudo('./%s' % filename)
+    url = 'http://bitnami.org/files/stacks/mediawiki/%s/%s' % (MW_VERSION,
+                                                               MW_FILENAME)
+    if not exists('./%s' % MW_FILENAME):
+        run('wget %s' % url)
+        run('chmod +x %s' % MW_FILENAME)
+    sudo('./%s' % MW_FILENAME)
 
-def mediawiki_extensions():
+def mw_extensions():
     ls = MW_LOCALSETTINGS
     print('------------------------------------------------------------------------') 
     print('Extension:WikiEditor')
@@ -130,6 +135,49 @@ def mediawiki_extensions():
         sudo('for i in `find . -type d`; do  chmod 755 $i; done')
         sudo('for i in `find . -type f`; do  chmod 644 $i; done')
 
+USER_CONFIG = """# -*- coding: utf-8  -*-
+family = '%(family)s'
+mylang = 'en'
+usernames = {}
+usernames['%(family)s'] = {}
+usernames['%(family)s']['en'] = u'%(botname)s'
+authenticate['%(hostname)s'] = ('%(botname)s','%(botpass)s')
+sysopnames['%(family)s']['en']='%(sysopname)s'"""
+
+def mw_bot_setup():
+    print('------------------------------------------------------------------------')
+    print('git clone gjost@jostwebwerks.com:/var/git/densho-wikitools.git')
+    src = 'http://svn.wikimedia.org/svnroot/pywikipedia/trunk/pywikipedia/'
+    print('svn checkout %s ./pywikipedia' % src)
+    # user-config.py
+    prompt(' Wiki hostname?', key='hostname')
+    prompt('   Wiki family?', key='family')
+    prompt('Sysop username?', key='sysopname')
+    prompt('  Bot username?', key='botname')
+    prompt('  Bot password?', key='botpass')
+    user_config = USER_CONFIG % {
+        'hostname':unicode(env.hostname),
+        'family':unicode(env.family),
+        'sysopname':unicode(env.sysopname),
+        'botname':unicode(env.botname),
+        'botpass':unicode(env.botpass),}
+    print('user-config.py:')
+    print('----------------------------------------')
+    print(user_config)
+    print('----------------------------------------')
+    print('- Login to %s' % env.hostname)
+    print('- cd to pywikipedia')
+    print('- vi user-config.py')
+    print('- python generate_family_file.py')
+
+def mw_teardown():
+    print('------------------------------------------------------------------------')
+    with cd(BITNAMI_PATH):
+        sudo('./uninstall')
+    #run('rm %s' % MW_FILENAME)
+    # Close port 80
+    sudo('ufw delete allow 80/tcp')
+
 def bootstrap():
     pre_setup()
     hostname()
@@ -137,4 +185,6 @@ def bootstrap():
     ssh_setup()
     aptup()
     apt_install()
-    #mediawiki_setup()
+    #mw_setup()
+    #mw_extensions()
+    #mw_pywikibot()
