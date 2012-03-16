@@ -15,18 +15,9 @@ SRC_DIR  = '/home/gjost/www/densho/encyclopedia/wiki/documents'
 DEST_DIR = '/home/gjost/www/densho/encyclopedia/wiki/pages'
 # Template that pywikipediabot.pagefromfile understands.
 TEMPLATE = """{{-start-}}
-'''%s'''
-%s
-{{-stop-}}"""
+'''%s'''%s{{-stop-}}"""
 # output file extension
 EXTENSION = 'mwp'
-
-SOURCE_FILES = [
-    'EmergencyServiceCommitteeNakamura.docx.html',
-    'KooskiaWegars.doc.html',
-    'SoneMonicaMatsumoto.docx.html',
-    'kotonk.doc.html',
-    ]
 
 
 
@@ -307,17 +298,19 @@ def replace_references(html, references, debug=False):
         name = ref['href']
         note = ref['note']
         note = note.replace('<em>', "''").replace('</em>', "''")
-        a = soup.find('a', attrs={'name':name, 'href':href}).parent
-        if debug:
-            print name
-            print href
-            print ref['note']
-            print '<a href="%s" name="%s">' % (href, name)
-            print a
-        new_tag = soup.new_tag('ref')
-        new_tag['name'] = name
-        new_tag.string = note
-        a.replace_with(new_tag)
+        a = soup.find('a', attrs={'name':name, 'href':href})
+        if a:
+            a.parent
+            if debug:
+                print name
+                print href
+                print ref['note']
+                print '<a href="%s" name="%s">' % (href, name)
+                print a
+            new_tag = soup.new_tag('ref')
+            new_tag['name'] = name
+            new_tag.string = note
+            a.replace_with(new_tag)
     return unicode(soup)
 
 def substitute_html_entities(html):
@@ -338,61 +331,211 @@ def convert_tags_to_wikitext(html):
     # empty <a> tags
     pattern = r'<a class="[a-z0-9 ]+" href="(http://[a-zA-Z0-9 _.,-;:/?&#%]+)"></a>'
     html = re.sub(pattern, '', html)
+    # the last <span> tags
+    html = html.replace('<span>','').replace('</span>','')
     # spacing
     html = html.replace('\n\n\n', '\n\n')
     return html
 
-def bury_the_bodies(html):
+def bury_the_body(html):
     # <body class="c10">, </body>
-    pattern = u'<body class="[a-z0-9 ]+">'
+    #pattern = u'<body[a-z0-9 :;-="#]*>'
+    pattern = u'<body[a-z0-9 -="]*>'
     html = re.sub(pattern, '', html)
-    html = html.replace('</body>', '')
+    html = html.replace('</body>', '').replace('<html>', '').replace('</html>', '')
     return html
 
 
 
+# ----------------------------------------------------------------------
 
+
+
+def rm_empty_span(html):
+    """Removes all the <span> tags with no style attrs.
+    """
+    soup = BeautifulSoup(html)
+    tags = ['span', 'p']
+    for tag in tags:
+        for t in soup.find_all(tag):
+            if not t.attrs:
+                t.replace_with_children()
+    return unicode(soup)
+
+def convert_pspan(html):
+    whitelist = {'italic':'em',
+                 'underline':'u',
+                 'bold':'strong',}
+    soup = BeautifulSoup(html)
+    tags = ['span', 'p']
+    for tag in tags:
+        for t in soup.find_all(tag):
+            if t.attrs['style']:
+                n = 0
+                convert_to = None
+                for propval in t.attrs['style'].split(';'):
+                    pv = propval.split(':')
+                    for value in whitelist.keys():
+                        if pv and (len(pv) == 2) and (value in pv[1]):
+                            n = n + 1
+                            convert_to = whitelist[value]
+                if not n:
+                    del t['style']
+                elif n and convert_to:
+                    t.name = convert_to
+                    t.attrs = None
+    return unicode(soup)
+
+def convert_inline_headers(html, debug=False):
+    """Convert Google Docs headers to plain h(1-6).
+    
+    h2 - <p><span style="font-weight:bold;">
+         <p><strong>
+    Executive decision: convert them all to h2 except the first, which is h1.
+    """
+    title = None
+    soup = BeautifulSoup(html)
+    # h2 - <p><span class="[bold]">
+    for p in soup.find_all(name='p'):
+        for s in p.find_all(attrs={'style':re.compile('bold')}):
+            if s.string and s.string.strip():
+                # title is first match
+                if not title:
+                    title = s.string
+                    s.parent.decompose()
+                else:
+                    new_string = '\n\n==%s==\n\n' % s.string
+                    s.parent.replace_with(new_string)
+    return unicode(soup), title
+
+def convert_external_links(html):
+    soup = BeautifulSoup(html)
+    for a in soup.find_all(name='a'):
+        href = a.attrs['href']
+        txt = a.string
+        # screen out
+        n = 0
+        if ('headword' in href): n = n + 1
+        if (href == '#'):        n = n + 1
+        if ('#cmnt' in href):    n = n + 1
+        if (href == '') or (href == None): n = n + 1
+        # replace
+        if n == 0:
+            if (href and txt) and (txt != href):
+                ns = '[%s %s]' % (href, txt)
+            else:
+                ns = href
+            a.replace_with(ns)
+    return unicode(soup)
+
+def rm_link_underlines(html):
+    soup = BeautifulSoup(html)
+    for u in soup.find_all('u'):
+        if u.string and ('http:' in u.string):
+            u.replace_with_children()
+    return unicode(soup)
+
+
+
+# ----------------------------------------------------------------------
+
+
+
+def parse_headstyle_googledoc(html):
+    """Parse Google Docs HTML with CSS in <head><style>.
+    """
+    spans_tags = map_spans_to_tags(html)
+    # transform in various ways
+    html = remove_empty_tags(html)
+    html,title = convert_headers(html, spans_tags)
+    if not title:
+        t = os.path.basename(fname)
+        ext = os.path.splitext(t)
+        title = t.replace(ext[-1], '')
+    html = convert_headword_links(html)
+    html = convert_spans_tags(html, spans_tags)
+    html,references = find_references(html)
+    html = replace_references(html, references)
+    #html = remove_whitespace(html)
+    html = convert_paragraphs(html)
+    html = remove_tags(html, rmthese=['span',])
+    html = convert_tags_to_wikitext(html)
+    return html,title
+
+
+def parse_inlinestyle_googledoc(html):
+    soup = BeautifulSoup(html)
+    html = unicode(soup.body)
+    html = rm_empty_span(html)
+    html,title = convert_inline_headers(html)
+    html = convert_headword_links(html)
+    html = convert_pspan(html)
+    html,references = find_references(html)
+    html = replace_references(html, references)
+    html = remove_empty_tags(html)
+    html = convert_external_links(html)
+    html = rm_link_underlines(html)
+    html = convert_paragraphs(html)
+    html = convert_tags_to_wikitext(html)
+    #title = 'NOT YET IMPLEMENTED'
+    return html,title
+
+
+
+SOURCE_FILES = [
+    #'ABCList.doc.html',
+    #'ACLU.doc.html',
+    'AFSCAustin.doc.html',
+    #'AllCenterConfHayashi.docx.html',
+    #'BiddleFrancis.doc.html',
+    ]
+DONT_PARSE_THESE = ['index.html',]
 
 def main():
-    #source_files = SOURCE_FILES
-    source_files = os.listdir(SRC_DIR)
+    source_files = []
+    fnames = os.listdir(SRC_DIR)
+    fnames.sort()
+    for f in fnames:
+        if f not in DONT_PARSE_THESE:
+            source_files.append(f)
     source_files.sort()
+    #source_files = SOURCE_FILES
     print source_files
     print
-    
+
+    titles = []
     for fname in source_files:
         inname = '/'.join([SRC_DIR, fname])
         print 'IN : %s' % inname
         infile = codecs.open(inname, 'r', 'utf-8')
         raw = infile.read()
         infile.close()
+        #rawsoup = BeautifulSoup(raw)
+        #outname = '/'.join([DEST_DIR, '%s.%s' % (inname, EXTENSION)]).replace(' ', '-')
+        #print 'OUT: %s' % outname
+        #out = codecs.open(inname.replace('.doc', '.clean'), 'w', 'utf-8')
+        #out.write(rawsoup.prettify())
+        #out.close()
+        #break
         
         # convert (again) to Unicode
         html = UnicodeDammit(raw, ["windows-1252"], smart_quotes_to="html").unicode_markup
         # convert Windoze chars
         html = demoronizer(html)
-        
-        spans_tags = map_spans_to_tags(html)
-        # transform in various ways
-        html = remove_empty_tags(html)
-        html,title = convert_headers(html, spans_tags)
+
+        #html,title = parse_headstyle_googledoc(html)
+        html,title = parse_inlinestyle_googledoc(html)
         if not title:
-            t = os.path.basename(fname)
-            ext = os.path.splitext(t)
-            title = t.replace(ext[-1], '')
-        html = convert_headword_links(html)
-        html = convert_spans_tags(html, spans_tags)
-        html,references = find_references(html)
-        html = replace_references(html, references)
-        #html = remove_whitespace(html)
-        html = convert_paragraphs(html)
-        html = remove_tags(html, rmthese=['span',])
-        html = convert_tags_to_wikitext(html)
+            title = fname.replace('.doc','').replace('.docx','').replace('.html','')
+        title = title.replace(u'“','').replace(u'”','').replace(u"’",'')
+        titles.append(title)
         
         # templatize
-        soup = BeautifulSoup(html)
-        page = TEMPLATE % (title, unicode(soup.body))
-        page = bury_the_bodies(page)
+        #soup = BeautifulSoup(html)
+        #wikitext = unicode(soup.body)
+        wikitext = html.strip()
+        wikitext = bury_the_body(wikitext)
+        page = TEMPLATE % (title, wikitext)
         
         # write to file
         outname = '/'.join([DEST_DIR, '%s.%s' % (title, EXTENSION)]).replace(' ', '-')
@@ -403,6 +546,15 @@ def main():
         if os.path.exists(outname):
             print 'OK'
         print
+    # list of articles for Main_Page
+    alist = ['== Articles ==',]
+    for t in titles:
+        alist.append('* [[%s]]' % t)
+    aout = open('/'.join([DEST_DIR,'articles.mwp']), 'w')
+    articles = TEMPLATE % ('Articles', '\n'.join(alist))
+    aout.write(articles)
+    aout.close()
+    
 
 if __name__ == '__main__':
     main()
