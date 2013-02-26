@@ -1,0 +1,21 @@
+
+
+
+Instead of writing down the list of templates, files, pages, and other crap to download, use the MediaWiki API:
+
+
+# Wantedfiles ----------------------------------------------------------
+http://beater/mediawiki/api.php?action=query&list=querypage&qppage=Wantedfiles
+
+File:Imbox notice.png
+https://en.wikipedia.org/wiki/File:Imbox_notice.png
+<div class="fullMedia"><a href="//upload.wikimedia.org/wikipedia/en/3/31/Imbox_notice.png" class="internal" title="Imbox notice.png">Imbox_notice.png</a>‎
+https://upload.wikimedia.org/wikipedia/en/3/31/Imbox_notice.png
+
+
+# Wantedpages ----------------------------------------------------------
+http://beater/mediawiki/api.php?action=query&list=querypage&qppage=Wantedpages
+
+
+# Wantedtemplates ------------------------------------------------------
+http://beater/mediawiki/api.php?action=query&list=querypage&qppage=Wantedtemplates
