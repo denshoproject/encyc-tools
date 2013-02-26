@@ -9,8 +9,9 @@ from fabric.contrib.console import confirm
 from fabric.contrib.files import exists, contains, sed, append
 from fabric.operations import prompt
 
-PACKAGES = ['ssh', 'ufw', 'mg', 'curl', 'wget',
-            'git', 'subversion', 'python-pip',]
+PACKAGES = ['ssh', 'ufw', 'mg', 'curl', 'wget', 'htop', 'ack-grep', 'elinks',
+            'git-core', 'subversion', 'python-pip',
+            'imagemagick',]
 
 def pre_setup():
     print 'Customize vanilla-deb6 before continuing.'
@@ -66,6 +67,56 @@ def ssh_setup():
     # restart
     sudo('/etc/init.d/ssh restart')
 
+
+
+# PUPPET ===============================================================
+
+PUPPET_MASTER_IP = '10.0.1.24'
+PUPPET_PORT = '8140'
+
+def puppet_master_setup():
+    # install packages
+    for p in ['git', 'puppet', 'puppetmaster',]:
+        sudo('apt-get -y install %s' % p)
+    ## clone configs
+    #with('/etc'):
+    #    sudo('git clone USER@SERVER:/var/git/REPO.git ./puppet')
+    # 
+    
+def puppet_master_pull():
+    with('/etc/puppet'):
+        sudo('git fetch')
+        sudo('git pull')
+
+def puppet_client_setup():
+    # install packages
+    for p in ['puppet',]:
+        sudo('apt-get -y install %s' % p)
+    # add puppet to /etc/hosts
+    if not contains('/etc/hosts', 'puppetmaster'):
+        append(ls, '', use_sudo=True);
+
+def _puppet_master_allowtcp(client_ip):
+    sudo('ufw allow proto tcp from %s to any port %s' % (client_ip, PUPPET_PORT))
+
+def _puppet_client_request():
+    sudo('ufw allow proto tcp from %s, to any port %s' % (PUPPET_MASTER_IP, PUPPET_PORT))
+    sudo('puppetd --server puppetmaster --waitforcert 60 --test &&')
+
+def _puppet_master_sign():
+    sudo('puppetca --list')
+    prompt('Client Hostname?', key='client_hostname')
+    sudo('puppetca --sign %s' % client_hostname)
+
+def puppet_register():
+    prompt('Client IP?', key='client_ip')
+    _puppet_master_allowtcp(env.client_ip)
+    _puppet_client_request()
+    _puppet_master_sign()
+
+
+
+# MEDIAWIKI ============================================================
 
 BITNAMI_PATH = '/opt/mediawiki-1.18.1-0'
 MW_PATH = '%s/apps/mediawiki/htdocs' % BITNAMI_PATH
@@ -134,6 +185,14 @@ def mw_extensions():
         # recursively chmod directories 755, files 644
         sudo('for i in `find . -type d`; do  chmod 755 $i; done')
         sudo('for i in `find . -type f`; do  chmod 644 $i; done')
+    print('------------------------------------------------------------------------') 
+    print('Miscellaneous Settings')
+    if not contains(ls, '$wgFileExtensions[]'):
+        append(ls, '', use_sudo=True);
+        append(ls, '# SVG graphics', use_sudo=True);
+        append(ls, "$wgFileExtensions[] = 'svg';", escape=False, use_sudo=True);
+        append(ls, "$wgAllowTitlesInSVG = true;", escape=False, use_sudo=True);
+        append(ls, "$wgSVGConverter = 'ImageMagick';", escape=False, use_sudo=True);
 
 USER_CONFIG = """# -*- coding: utf-8  -*-
 family = '%(family)s'
@@ -188,3 +247,4 @@ def bootstrap():
     #mw_setup()
     #mw_extensions()
     #mw_pywikibot()
+    
