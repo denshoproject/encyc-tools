@@ -23,7 +23,6 @@ if sys.platform == 'win32':
     SRC_DIR = 'e:\\encyclopedia\wiki\pages'
 else:
     SRC_DIR = '/home/gjost/www/densho/encyclopedia/wiki/pages'
-SEP = os.path.sep
 # Delete existing pages before uploading
 force = True
 # Templates to upload (points to './pages/NAME.mwp')
@@ -33,6 +32,8 @@ EXTENSION = '.mwp'
 
 def main():
     parser = OptionParser()
+    parser.add_option("-s", "--srcdir", dest="srcdir",
+                  help="Directory containing the .mwp pages to upload")
     parser.add_option("-f", "--force",
                      action="store_true", dest="force", default=False,
                      help="Upload even if pages already exist.")
@@ -61,22 +62,23 @@ def main():
     dry = False
     
     pages = []
-    print SRC_DIR
-    fnames = os.listdir(SRC_DIR)
+    print options.srcdir
+    fnames = os.listdir(options.srcdir)
     fnames.sort()
     for fn in fnames:
         if '.mwp' in fn:
             pages.append(fn)
     print pages
     for page in pages:
-        filename = SEP.join([SRC_DIR,page])
+        filename = os.path.join(options.srcdir, page)
         print filename
+        # reads .mwp file
         reader = PageFromFileReader(filename,
                                     pageStartMarker, pageEndMarker,
                                     titleStartMarker, titleEndMarker,
                                     include, notitle)
-        bot = PageFromFileRobot(reader,
-                                force, append, summary, minor, autosummary, dry)
+        # writes to wiki
+        bot = PageFromFileRobot(reader, force, append, summary, minor, autosummary, dry)
         bot.run()
     print
 
